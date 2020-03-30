@@ -39,6 +39,52 @@ class SMSNotifierPlugin(octoprint.plugin.EventHandlerPlugin,
             dict(type="settings", name="SMS Notifier", custom_bindings=False)
         ]
 
+    # Api
+      
+    def on_api_command(self, command, data):
+      if not user_permission.can():
+        return flask.make_response("Insufficient rights", 403)
+
+      if command == 'test':
+        import octoprint.util
+        elapsed_time = "123"
+
+        fromnumber = phonenumbers.format_number(phonenumbers.parse(self._settings.get(['from_number']), 'US'), phonenumbers.PhoneNumberFormat.E164)
+
+        for number in self._settings.get(['recipient_number']).split(','):
+            tonumber = phonenumbers.format_number(phonenumbers.parse(number, 'US'), phonenumbers.PhoneNumberFormat.E164)
+        tags = {
+            'filename': "Test File",
+            'elapsed_time': elapsed_time,
+            'printer_name': self._settings.get(["printer_name"])
+        }
+        message = self._settings.get(["message_format", "body"]).format(**tags)
+
+        client = TwilioRestClient(self._settings.get(['account_sid']), self._settings.get(['auth_token']))
+        if snapshot:
+            try:
+                client.messages.create(to=tonumber, from_=fromnumber, body=message, media_url=snapshot)
+            except Exception as e:
+                # report problem sending sms
+                self._logger.exception("SMS notification error: %s" % (str(e)))
+                return False
+            else:
+                # report notification was sent
+                self._logger.info("Print notification sent to %s" % (self._settings.get(['recipient_number'])))
+                return True
+
+        try:
+            client.messages.create(to=tonumber, from_=fromnumber, body=message)
+        except Exception as e:
+            # report problem sending sms
+            self._logger.exception("SMS notification error: %s" % (str(e)))
+        else:
+            # report notification was sent
+            self._logger.info("Print notification sent to %s" % (self._settings.get(['recipient_number'])))
+            return True
+
+      return False  
+
     # EventPlugin
 
     def on_event(self, event, payload):
